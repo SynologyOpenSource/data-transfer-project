@@ -17,7 +17,6 @@
 
 package org.datatransferproject.datatransfer.synology.uploader;
 
-import static org.apache.http.HttpStatus.SC_INTERNAL_SERVER_ERROR;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
@@ -39,10 +38,10 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.datatransferproject.api.launcher.Monitor;
 import org.datatransferproject.datatransfer.synology.constant.SynologyConstant;
-import org.datatransferproject.datatransfer.synology.exceptions.SynologyHttpException;
-import org.datatransferproject.datatransfer.synology.exceptions.SynologyImportException;
 import org.datatransferproject.datatransfer.synology.service.SynologyDTPService;
 import org.datatransferproject.spi.transfer.idempotentexecutor.IdempotentImportExecutor;
+import org.datatransferproject.spi.transfer.types.CopyExceptionWithFailureReason;
+import org.datatransferproject.spi.transfer.types.UploadErrorException;
 import org.datatransferproject.types.common.DownloadableItem;
 import org.datatransferproject.types.common.models.media.MediaAlbum;
 import org.datatransferproject.types.common.models.photos.PhotoModel;
@@ -116,18 +115,17 @@ public class SynologyUploaderTest {
     }
 
     @Test
-    public void shouldThrowExceptionIfCreateAlbumFails() {
+    public void shouldThrowExceptionIfCreateAlbumFails() throws CopyExceptionWithFailureReason {
       SynologyUploader spyUploader =
           Mockito.spy(new SynologyUploader(executor, monitor, synologyDTPService));
       List<MediaAlbum> albums = List.of(new MediaAlbum("1", "album1", "desc"));
       String expectedMessage = "Failed to import albums";
       when(synologyDTPService.createAlbum(any(), any()))
-          .thenThrow(
-              new SynologyHttpException(
-                  expectedMessage, SC_INTERNAL_SERVER_ERROR, "Internal Server Error"));
+          .thenThrow(new UploadErrorException(expectedMessage, null));
       Exception e =
           assertThrows(
-              SynologyImportException.class, () -> spyUploader.importAlbums(albums, mockJobId));
+              CopyExceptionWithFailureReason.class,
+              () -> spyUploader.importAlbums(albums, mockJobId));
       assertTrue(containsMessage(e, expectedMessage));
     }
   }
@@ -158,7 +156,7 @@ public class SynologyUploaderTest {
     }
 
     @BeforeEach
-    public void setUp() {
+    public void setUp() throws CopyExceptionWithFailureReason {
       lenient()
           .when(synologyDTPService.addItemToAlbum(any(), any(), any()))
           .thenReturn(Map.of("success", true));
@@ -192,7 +190,7 @@ public class SynologyUploaderTest {
     @ParameterizedTest(name = "shouldImportMediaItemsWhenAlbumBeforeItem [{index}] {0}")
     @MethodSource("provideMediaItems")
     public void shouldImportMediaItemsWhenAlbumBeforeItem(
-        List<? extends DownloadableItem> mediaItems) {
+        List<? extends DownloadableItem> mediaItems) throws CopyExceptionWithFailureReason {
       SynologyUploader uploader = new SynologyUploader(executor, monitor, synologyDTPService);
       List<MediaAlbum> albums = List.of(new MediaAlbum(albumId, "album1", "desc"));
 
@@ -270,49 +268,10 @@ public class SynologyUploaderTest {
       }
     }
 
-    @ParameterizedTest(
-        name = "shouldThrowHttpExceptionWithStatusCodeIfCreateMediaItemFails [{index}] {0}")
-    @MethodSource("provideMediaItems")
-    public void shouldThrowHttpExceptionWithStatusCodeIfCreateMediaItemFails(
-        List<? extends DownloadableItem> mediaItems) {
-      SynologyUploader spyUploader =
-          Mockito.spy(new SynologyUploader(executor, monitor, synologyDTPService));
-      List<MediaAlbum> albums = List.of(new MediaAlbum("1", "album1", "desc"));
-      String expectedMessage = String.format("statusCode=%d", SC_INTERNAL_SERVER_ERROR);
-
-      if (mediaItems.get(0) instanceof PhotoModel) {
-        when(synologyDTPService.createPhoto(any(), any()))
-            .thenThrow(
-                new SynologyHttpException(
-                    "Failed to create photo", SC_INTERNAL_SERVER_ERROR, "Internal Server Error"));
-      } else if (mediaItems.get(0) instanceof VideoModel) {
-        when(synologyDTPService.createVideo(any(), any()))
-            .thenThrow(
-                new SynologyHttpException(
-                    "Failed to create video", SC_INTERNAL_SERVER_ERROR, "Internal Server Error"));
-      }
-
-      spyUploader.importAlbums(albums, mockJobId);
-
-      if (mediaItems.get(0) instanceof PhotoModel) {
-        Exception e =
-            assertThrows(
-                SynologyImportException.class,
-                () -> spyUploader.importPhotos((List<PhotoModel>) mediaItems, mockJobId));
-        assertTrue(containsMessage(e, expectedMessage));
-      } else if (mediaItems.get(0) instanceof VideoModel) {
-        Exception e =
-            assertThrows(
-                SynologyImportException.class,
-                () -> spyUploader.importVideos((List<VideoModel>) mediaItems, mockJobId));
-        assertTrue(containsMessage(e, expectedMessage));
-      }
-    }
-
     @ParameterizedTest(name = "shouldThrowExceptionIfCreateMediaItemNotSuccess [{index}] {0}")
     @MethodSource("provideMediaItems")
     public void shouldThrowExceptionIfCreateMediaItemNotSuccess(
-        List<? extends DownloadableItem> mediaItems) {
+        List<? extends DownloadableItem> mediaItems) throws CopyExceptionWithFailureReason {
       SynologyUploader spyUploader =
           Mockito.spy(new SynologyUploader(executor, monitor, synologyDTPService));
       List<MediaAlbum> albums = List.of(new MediaAlbum("1", "album1", "desc"));
@@ -328,43 +287,41 @@ public class SynologyUploaderTest {
       if (mediaItems.get(0) instanceof PhotoModel) {
         Exception e =
             assertThrows(
-                SynologyImportException.class,
+                CopyExceptionWithFailureReason.class,
                 () -> spyUploader.importPhotos((List<PhotoModel>) mediaItems, mockJobId));
-        assertTrue(containsMessage(e, "Failed to import photos"));
+        assertTrue(containsMessage(e, "Failed to import item"));
       } else if (mediaItems.get(0) instanceof VideoModel) {
         Exception e =
             assertThrows(
-                SynologyImportException.class,
+                CopyExceptionWithFailureReason.class,
                 () -> spyUploader.importVideos((List<VideoModel>) mediaItems, mockJobId));
-        assertTrue(containsMessage(e, "Failed to import videos"));
+        assertTrue(containsMessage(e, "Failed to import item"));
       }
     }
 
     @ParameterizedTest(name = "shouldThrowExceptionIfAddItemToAlbumFails [{index}] {0}")
     @MethodSource("provideMediaItems")
     public void shouldThrowExceptionIfAddItemToAlbumFails(
-        List<? extends DownloadableItem> mediaItems) {
+        List<? extends DownloadableItem> mediaItems) throws CopyExceptionWithFailureReason {
       SynologyUploader spyUploader =
           Mockito.spy(new SynologyUploader(executor, monitor, synologyDTPService));
       List<MediaAlbum> albums = List.of(new MediaAlbum("1", "album1", "desc"));
       String expectedMessage = "Failed to add item to album";
 
       when(synologyDTPService.addItemToAlbum(any(), any(), any()))
-          .thenThrow(
-              new SynologyHttpException(
-                  expectedMessage, SC_INTERNAL_SERVER_ERROR, "Internal Server Error"));
+          .thenThrow(new UploadErrorException(expectedMessage, null));
 
       spyUploader.importAlbums(albums, mockJobId);
       if (mediaItems.get(0) instanceof PhotoModel) {
         Exception e =
             assertThrows(
-                SynologyImportException.class,
+                CopyExceptionWithFailureReason.class,
                 () -> spyUploader.importPhotos((List<PhotoModel>) mediaItems, mockJobId));
         assertTrue(containsMessage(e, expectedMessage));
       } else if (mediaItems.get(0) instanceof VideoModel) {
         Exception e =
             assertThrows(
-                SynologyImportException.class,
+                CopyExceptionWithFailureReason.class,
                 () -> spyUploader.importVideos((List<VideoModel>) mediaItems, mockJobId),
                 expectedMessage);
         assertTrue(containsMessage(e, expectedMessage));
@@ -374,7 +331,7 @@ public class SynologyUploaderTest {
     @ParameterizedTest(name = "shouldThrowExceptionIfAddItemToAlbumNotSuccess [{index}] {0}")
     @MethodSource("provideMediaItems")
     public void shouldThrowExceptionIfAddItemToAlbumNotSuccess(
-        List<? extends DownloadableItem> mediaItems) {
+        List<? extends DownloadableItem> mediaItems) throws CopyExceptionWithFailureReason {
       SynologyUploader spyUploader =
           Mockito.spy(new SynologyUploader(executor, monitor, synologyDTPService));
       List<MediaAlbum> albums = List.of(new MediaAlbum("1", "album1", "desc"));
@@ -387,13 +344,13 @@ public class SynologyUploaderTest {
       if (mediaItems.get(0) instanceof PhotoModel) {
         Exception e =
             assertThrows(
-                SynologyImportException.class,
+                CopyExceptionWithFailureReason.class,
                 () -> spyUploader.importPhotos((List<PhotoModel>) mediaItems, mockJobId));
         assertTrue(containsMessage(e, expectedMessage));
       } else if (mediaItems.get(0) instanceof VideoModel) {
         Exception e =
             assertThrows(
-                SynologyImportException.class,
+                CopyExceptionWithFailureReason.class,
                 () -> spyUploader.importVideos((List<VideoModel>) mediaItems, mockJobId));
         assertTrue(containsMessage(e, expectedMessage));
       }

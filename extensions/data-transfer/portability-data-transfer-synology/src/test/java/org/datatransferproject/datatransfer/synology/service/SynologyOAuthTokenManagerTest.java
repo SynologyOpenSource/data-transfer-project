@@ -34,7 +34,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 import org.datatransferproject.api.launcher.Monitor;
-import org.datatransferproject.datatransfer.synology.exceptions.SynologyImportException;
+import org.datatransferproject.spi.transfer.types.InvalidTokenException;
 import org.datatransferproject.types.transfer.auth.AppCredentials;
 import org.datatransferproject.types.transfer.auth.TokensAndUrlAuthData;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,7 +60,7 @@ public class SynologyOAuthTokenManagerTest {
   @Nested
   class OAuthTokenManagerBasicTest {
     @Test
-    void shouldGetAccessTokenIfExist() {
+    void shouldGetAccessTokenIfExist() throws InvalidTokenException {
       UUID jobId = UUID.randomUUID();
       TokensAndUrlAuthData authData =
           new TokensAndUrlAuthData("accessToken", "refreshToken", "http://mock.token.url");
@@ -74,13 +74,13 @@ public class SynologyOAuthTokenManagerTest {
       UUID jobId = UUID.randomUUID();
 
       assertThrows(
-          SynologyImportException.class,
+          InvalidTokenException.class,
           () -> tokenManager.getAccessToken(jobId),
           "No auth data found for job: " + jobId);
     }
 
     @Test
-    void shouldNotReplaceExistingAuthData() {
+    void shouldNotReplaceExistingAuthData() throws InvalidTokenException {
       UUID jobId = UUID.randomUUID();
       TokensAndUrlAuthData authData1 =
           new TokensAndUrlAuthData("accessToken1", "refreshToken1", "url1");
@@ -204,7 +204,8 @@ public class SynologyOAuthTokenManagerTest {
     }
 
     @Test
-    void shouldUpdateTokenAndReturnTrue() throws IOException, JsonProcessingException {
+    void shouldUpdateTokenAndReturnTrue()
+        throws IOException, JsonProcessingException, InvalidTokenException {
       UUID jobId = UUID.randomUUID();
       TokensAndUrlAuthData authData =
           new TokensAndUrlAuthData("oldAccessToken", "oldRefreshToken", "http://mock.token.url");
