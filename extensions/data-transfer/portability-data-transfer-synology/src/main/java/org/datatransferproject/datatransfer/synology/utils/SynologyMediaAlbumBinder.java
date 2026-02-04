@@ -67,22 +67,8 @@ public class SynologyMediaAlbumBinder<K> {
       return;
     }
 
-    K readyAlbum = readyAlbumMap.get(albumKey);
-    if (readyAlbum != null) {
-      onAlbumReady.accept(readyAlbum, newItemKey, jobId);
-      monitor.debug(
-          () -> "[SynologyMediaBinder] item PROCESSED",
-          "albumKey:",
-          albumKey,
-          "newItemKey:",
-          newItemKey,
-          jobId);
-      return;
-    }
-
     synchronized (lock) {
-      // Re-check if album is ready now that we are in a synchronized block
-      readyAlbum = readyAlbumMap.get(albumKey);
+      K readyAlbum = readyAlbumMap.get(albumKey);
       if (readyAlbum != null) {
         onAlbumReady.accept(readyAlbum, newItemKey, jobId);
         monitor.debug(

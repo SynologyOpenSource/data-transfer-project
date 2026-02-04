@@ -247,8 +247,7 @@ public class SynologyDTPService {
   }
 
   @VisibleForTesting
-  protected void checkUnprocessableContent(Response response)
-      throws CopyExceptionWithFailureReason {
+  protected void throwExceptionIfNoQuota(Response response) throws CopyExceptionWithFailureReason {
     String errorCode = "";
     String errorMessage = "";
 
@@ -275,9 +274,10 @@ public class SynologyDTPService {
 
     if (errorCode.equals("2000") || errorCode.equals("2001")) {
       throw new NoNasInAccountException(
-          String.format(
-              "SynologyDTPService get http 422 with error: %s (%s)", errorMessage, errorCode),
-          null);
+          "Synology account has no NAS associated",
+          new IOException(
+              String.format(
+                  "SynologyDTPService get http 422 with error: %s (%s)", errorMessage, errorCode)));
     }
   }
 
@@ -295,23 +295,25 @@ public class SynologyDTPService {
         response = client.newCall(requestBuilder.build()).execute();
         if (!response.isSuccessful()) {
           int code = response.code();
-          if (code == 413) {
-            throw new DestinationMemoryFullException(
-                "SynologyDTPService get http 413 content too large", null);
-          }
-          if (code == 422) {
-            checkUnprocessableContent(response);
-          }
           if (code == 401 && !triedRefreshToken) {
             triedRefreshToken = true;
             if (tokenManager.refreshToken(jobId, client, objectMapper)) {
               continue;
             }
           }
+
+          if (code == 413) {
+            throw new DestinationMemoryFullException(
+                "Synology destination storage limit reached",
+                new IOException("SynologyDTPService get http 413 content too large"));
+
+          } else if (code == 422) {
+            throwExceptionIfNoQuota(response);
+          }
+
           throw new IOException(
               String.format(
-                  "SynologyDTPService get http %d with error: %s", code, response.message()),
-              null);
+                  "SynologyDTPService get http %d with error: %s", code, response.message()));
         }
       } catch (CopyExceptionWithFailureReason e) {
         monitor.severe(

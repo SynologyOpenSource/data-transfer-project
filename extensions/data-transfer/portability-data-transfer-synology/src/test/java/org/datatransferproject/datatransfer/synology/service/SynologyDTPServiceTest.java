@@ -680,7 +680,7 @@ public class SynologyDTPServiceTest {
       Response response = mockResponse(jsonBody);
 
       assertThrows(
-          NoNasInAccountException.class, () -> dtpService.checkUnprocessableContent(response));
+          NoNasInAccountException.class, () -> dtpService.throwExceptionIfNoQuota(response));
     }
 
     @Test
@@ -690,14 +690,14 @@ public class SynologyDTPServiceTest {
       Response response = mockResponse(jsonBody);
 
       assertThrows(
-          NoNasInAccountException.class, () -> dtpService.checkUnprocessableContent(response));
+          NoNasInAccountException.class, () -> dtpService.throwExceptionIfNoQuota(response));
     }
 
     @Test
     public void shouldNotThrowExceptionIfNoErrorCode() throws CopyExceptionWithFailureReason {
       String jsonBody = "{\"data\":{\"album_id\":\"test_album_id\"}}";
       Response response = mockResponse(jsonBody);
-      dtpService.checkUnprocessableContent(response);
+      dtpService.throwExceptionIfNoQuota(response);
     }
 
     @Test
@@ -705,14 +705,14 @@ public class SynologyDTPServiceTest {
         throws CopyExceptionWithFailureReason {
       String jsonBody = "{\"error\":{\"code\":\"1000\",\"message\":\"Some other error.\"}}";
       Response response = mockResponse(jsonBody);
-      dtpService.checkUnprocessableContent(response);
+      dtpService.throwExceptionIfNoQuota(response);
     }
 
     @Test
     public void shouldNotThrowExceptionIfBodyIsInvalidJson() throws CopyExceptionWithFailureReason {
       String jsonBody = "invalid-json";
       Response response = mockResponse(jsonBody);
-      dtpService.checkUnprocessableContent(response);
+      dtpService.throwExceptionIfNoQuota(response);
     }
   }
 }

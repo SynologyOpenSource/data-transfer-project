@@ -86,7 +86,9 @@ public class SynologyUploader {
         } else if (album instanceof VideoAlbum) {
           mediaAlbum = MediaAlbum.videoToMediaAlbum(((VideoAlbum) album));
         } else {
-          throw new UploadErrorException("Unexpected album type", null);
+          throw new UploadErrorException(
+              "cannot convert to MediaAlbum",
+              new IllegalArgumentException("Unsupported ImportableItem type: " + album.getClass()));
         }
         String newAlbumId =
             importItemWithCache(
