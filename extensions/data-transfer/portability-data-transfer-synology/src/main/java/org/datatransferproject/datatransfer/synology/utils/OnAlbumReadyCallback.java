@@ -18,6 +18,7 @@
 package org.datatransferproject.datatransfer.synology.utils;
 
 import java.util.UUID;
+import org.datatransferproject.spi.transfer.types.CopyExceptionWithFailureReason;
 
 /**
  * Callback interface for notifying when an album is ready.
@@ -26,5 +27,5 @@ import java.util.UUID;
  */
 @FunctionalInterface
 public interface OnAlbumReadyCallback<K> {
-  void accept(K newAlbumKey, K newItemKey, UUID jobId);
+  void accept(K newAlbumKey, K newItemKey, UUID jobId) throws CopyExceptionWithFailureReason;
 }

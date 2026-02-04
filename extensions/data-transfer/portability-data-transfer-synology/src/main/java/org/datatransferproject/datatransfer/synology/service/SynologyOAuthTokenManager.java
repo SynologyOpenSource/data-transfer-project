@@ -27,7 +27,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.datatransferproject.api.launcher.Monitor;
-import org.datatransferproject.datatransfer.synology.exceptions.SynologyImportException;
+import org.datatransferproject.spi.transfer.types.InvalidTokenException;
 import org.datatransferproject.types.transfer.auth.AppCredentials;
 import org.datatransferproject.types.transfer.auth.TokensAndUrlAuthData;
 
@@ -42,9 +42,9 @@ public class SynologyOAuthTokenManager {
     this.monitor = monitor;
   }
 
-  public String getAccessToken(UUID jobId) {
+  public String getAccessToken(UUID jobId) throws InvalidTokenException {
     if (!authMap.containsKey(jobId)) {
-      throw new SynologyImportException("No auth data found for job: " + jobId);
+      throw new InvalidTokenException("No auth data found for job: " + jobId, null);
     }
     return authMap.get(jobId).getAccessToken();
   }
