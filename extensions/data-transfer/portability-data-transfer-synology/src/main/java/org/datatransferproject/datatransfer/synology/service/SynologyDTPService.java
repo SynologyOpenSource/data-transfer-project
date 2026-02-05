@@ -24,7 +24,6 @@ import com.google.common.io.ByteStreams;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
-import java.util.Date;
 import java.net.URL;
 import java.util.Date;
 import java.util.Map;
@@ -37,13 +36,14 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.datatransferproject.api.launcher.Monitor;
-import org.datatransferproject.datatransfer.synology.exceptions.SynologyHttpException;
-import org.datatransferproject.datatransfer.synology.exceptions.SynologyImportException;
-import org.datatransferproject.datatransfer.synology.exceptions.SynologyMaxRetriesExceededException;
 import org.datatransferproject.datatransfer.synology.models.C2Api;
 import org.datatransferproject.datatransfer.synology.models.ServiceConfig;
 import org.datatransferproject.datatransfer.synology.utils.ServiceConfigParser;
 import org.datatransferproject.spi.cloud.storage.JobStore;
+import org.datatransferproject.spi.transfer.types.CopyExceptionWithFailureReason;
+import org.datatransferproject.spi.transfer.types.DestinationMemoryFullException;
+import org.datatransferproject.spi.transfer.types.NoNasInAccountException;
+import org.datatransferproject.spi.transfer.types.UploadErrorException;
 import org.datatransferproject.types.common.models.media.MediaAlbum;
 import org.datatransferproject.types.common.models.photos.PhotoModel;
 import org.datatransferproject.types.common.models.videos.VideoModel;
@@ -106,7 +106,8 @@ public class SynologyDTPService {
    * @param jobId the job ID
    * @return a map of shape {"data": {"album_id": <album_id>}}
    */
-  public Map<String, Object> createAlbum(MediaAlbum album, UUID jobId) {
+  public Map<String, Object> createAlbum(MediaAlbum album, UUID jobId)
+      throws CopyExceptionWithFailureReason {
     FormBody.Builder builder = new FormBody.Builder().add("title", album.getName());
     builder.add("album_id", album.getId());
     builder.add("job_id", jobId.toString());
@@ -124,7 +125,8 @@ public class SynologyDTPService {
    * @param jobId the job ID
    * @return a map of shape {"data": {"item_id": <item_id>}}
    */
-  public Map<String, Object> createPhoto(PhotoModel photo, UUID jobId) {
+  public Map<String, Object> createPhoto(PhotoModel photo, UUID jobId)
+      throws CopyExceptionWithFailureReason {
     byte[] imageBytes;
     try {
       InputStream inputStream = null;
@@ -138,9 +140,9 @@ public class SynologyDTPService {
       }
       imageBytes = ByteStreams.toByteArray(inputStream);
     } catch (MalformedURLException e) {
-      throw new SynologyImportException("Failed to create url for photo", e);
+      throw new UploadErrorException("Failed to create url for photo", e);
     } catch (IOException e) {
-      throw new SynologyImportException("Failed to create input stream for photo", e);
+      throw new UploadErrorException("Failed to create input stream for photo", e);
     }
 
     RequestBody fileBody = RequestBody.create(MediaType.parse(photo.getMimeType()), imageBytes);
@@ -178,7 +180,8 @@ public class SynologyDTPService {
    * @param jobId the job ID
    * @return a map of shape {"data": {"item_id": <item_id>}}
    */
-  public Map<String, Object> createVideo(VideoModel video, UUID jobId) {
+  public Map<String, Object> createVideo(VideoModel video, UUID jobId)
+      throws CopyExceptionWithFailureReason {
     byte[] videoBytes;
     try {
       InputStream inputStream = null;
@@ -193,9 +196,9 @@ public class SynologyDTPService {
 
       videoBytes = ByteStreams.toByteArray(inputStream);
     } catch (MalformedURLException e) {
-      throw new SynologyImportException("Failed to create url for video", e);
+      throw new UploadErrorException("Failed to create url for video", e);
     } catch (IOException e) {
-      throw new SynologyImportException("Failed to create input stream for video", e);
+      throw new UploadErrorException("Failed to create input stream for video", e);
     }
 
     RequestBody fileBody = RequestBody.create(MediaType.parse(video.getMimeType()), videoBytes);
@@ -232,7 +235,8 @@ public class SynologyDTPService {
    * @param itemId the item ID
    * @return a map of shape {"success": <bool>}
    */
-  public Map<String, Object> addItemToAlbum(String albumId, String itemId, UUID jobId) {
+  public Map<String, Object> addItemToAlbum(String albumId, String itemId, UUID jobId)
+      throws CopyExceptionWithFailureReason {
     FormBody.Builder builder =
         new FormBody.Builder()
             .add("job_id", jobId.toString())
@@ -243,7 +247,43 @@ public class SynologyDTPService {
   }
 
   @VisibleForTesting
-  protected Map<String, Object> sendPostRequest(String url, RequestBody body, UUID jobId) {
+  protected void throwExceptionIfNoQuota(Response response) throws CopyExceptionWithFailureReason {
+    String errorCode = "";
+    String errorMessage = "";
+
+    try {
+      assert response.body() != null;
+
+      String bodyString = response.body().string();
+      Map<String, Object> responseData =
+          (Map<String, Object>) objectMapper.readValue(bodyString, Map.class);
+
+      if (!responseData.containsKey("error")) {
+        return;
+      }
+
+      Map<String, Object> errorData = (Map<String, Object>) responseData.get("error");
+      errorCode = errorData.getOrDefault("code", "").toString();
+      errorMessage = errorData.getOrDefault("msg", "").toString();
+    } catch (Exception e) {
+      monitor.severe(
+          () ->
+              "[SynologyImporter] Failed to parse unprocessable content response data, exception:",
+          e);
+    }
+
+    if (errorCode.equals("2000") || errorCode.equals("2001")) {
+      throw new NoNasInAccountException(
+          "Synology account has no NAS associated",
+          new IOException(
+              String.format(
+                  "SynologyDTPService get http 422 with error: %s (%s)", errorMessage, errorCode)));
+    }
+  }
+
+  @VisibleForTesting
+  protected Map<String, Object> sendPostRequest(String url, RequestBody body, UUID jobId)
+      throws CopyExceptionWithFailureReason {
     boolean triedRefreshToken = false;
     Request.Builder requestBuilder = new Request.Builder().url(url).post(body);
 
@@ -261,8 +301,24 @@ public class SynologyDTPService {
               continue;
             }
           }
-          throw new SynologyHttpException("Synology request failed", code, response.message());
+
+          if (code == 413) {
+            throw new DestinationMemoryFullException(
+                "Synology destination storage limit reached",
+                new IOException("SynologyDTPService get http 413 content too large"));
+
+          } else if (code == 422) {
+            throwExceptionIfNoQuota(response);
+          }
+
+          throw new IOException(
+              String.format(
+                  "SynologyDTPService get http %d with error: %s", code, response.message()));
         }
+      } catch (CopyExceptionWithFailureReason e) {
+        monitor.severe(
+            () -> "[SynologyImporter] Failed to send post request,", "url:", url, "exception:", e);
+        throw e;
       } catch (Exception e) {
         monitor.severe(
             () -> "[SynologyImporter] Failed to send post request,", "url:", url, "exception:", e);
@@ -289,7 +345,10 @@ public class SynologyDTPService {
         lastException = e;
       }
     }
-    throw new SynologyMaxRetriesExceededException(
-        "Failed to send POST request", retryConfig.getMaxAttempts(), lastException);
+    throw new UploadErrorException(
+        String.format(
+            "Failed to send POST request after %d retries: %s",
+            retryConfig.getMaxAttempts(), lastException.getMessage()),
+        lastException);
   }
 }

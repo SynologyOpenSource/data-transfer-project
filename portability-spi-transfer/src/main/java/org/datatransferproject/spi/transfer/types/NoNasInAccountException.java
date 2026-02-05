@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The Data Transfer Project Authors.
+ * Copyright 2026 The Data Transfer Project Authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,21 +12,24 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
+package org.datatransferproject.spi.transfer.types;
 
-package org.datatransferproject.datatransfer.synology.exceptions;
+import javax.annotation.Nonnull;
 
 /**
- * Base class for exceptions thrown by the Synology DTP client. Business logic exceptions should
- * extend this class.
+ * NoNasInAccountException is thrown when the importer for a transfer has not found a NAS in the
+ * user's account and the transfer cannot continue.
  */
-public abstract class SynologyDTPClientException extends SynologyException {
-  protected SynologyDTPClientException(String message, String errorCode) {
-    super(message, errorCode);
+public class NoNasInAccountException extends CopyExceptionWithFailureReason {
+
+  public NoNasInAccountException(String message, Throwable cause) {
+    super(message, cause);
   }
 
-  protected SynologyDTPClientException(String message, Throwable cause, String errorCode) {
-    super(message, cause, errorCode);
+  @Nonnull
+  @Override
+  public String getFailureReason() {
+    return FailureReasons.NO_NAS_IN_ACCOUNT.toString();
   }
 }

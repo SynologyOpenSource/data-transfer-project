@@ -24,6 +24,7 @@ import static org.mockito.Mockito.verify;
 
 import java.util.UUID;
 import org.datatransferproject.api.launcher.Monitor;
+import org.datatransferproject.spi.transfer.types.CopyExceptionWithFailureReason;
 import org.datatransferproject.types.common.models.media.MediaAlbum;
 import org.datatransferproject.types.common.models.photos.PhotoModel;
 import org.junit.jupiter.api.Test;
@@ -43,7 +44,8 @@ public class SynologyMediaAlbumBinderTest {
   private final String newAlbumId = "100";
 
   @Test
-  public void shouldInvokeReadyHandlerWhenCreateItemBeforeAlbum() {
+  public void shouldInvokeReadyHandlerWhenCreateItemBeforeAlbum()
+      throws CopyExceptionWithFailureReason {
     SynologyMediaAlbumBinder<String> binder = new SynologyMediaAlbumBinder<>(mockConsumer, monitor);
 
     binder.put(photo.getAlbumId(), newPhotoId, jobId);
@@ -54,7 +56,8 @@ public class SynologyMediaAlbumBinderTest {
   }
 
   @Test
-  public void shouldInvokeReadyHandlerWhenCreateAlbumBeforeItem() {
+  public void shouldInvokeReadyHandlerWhenCreateAlbumBeforeItem()
+      throws CopyExceptionWithFailureReason {
     SynologyMediaAlbumBinder<String> binder = new SynologyMediaAlbumBinder<>(mockConsumer, monitor);
 
     binder.whenAlbumReady(album.getId(), newAlbumId, jobId);
@@ -65,7 +68,8 @@ public class SynologyMediaAlbumBinderTest {
   }
 
   @Test
-  public void shouldNotInvokeReadyHandlerWhenCreateItemBeforeAlbumAndKeyNotMatch() {
+  public void shouldNotInvokeReadyHandlerWhenCreateItemBeforeAlbumAndKeyNotMatch()
+      throws CopyExceptionWithFailureReason {
     SynologyMediaAlbumBinder<String> binder = new SynologyMediaAlbumBinder<>(mockConsumer, monitor);
 
     binder.put(photo.getAlbumId(), newPhotoId, jobId);
@@ -76,7 +80,8 @@ public class SynologyMediaAlbumBinderTest {
   }
 
   @Test
-  public void shouldNotInvokeReadyHandlerWhenCreateAlbumBeforeItemAndKeyNotMatch() {
+  public void shouldNotInvokeReadyHandlerWhenCreateAlbumBeforeItemAndKeyNotMatch()
+      throws CopyExceptionWithFailureReason {
     SynologyMediaAlbumBinder<String> binder = new SynologyMediaAlbumBinder<>(mockConsumer, monitor);
 
     binder.whenAlbumReady(album.getId(), newAlbumId, jobId);
@@ -87,21 +92,24 @@ public class SynologyMediaAlbumBinderTest {
   }
 
   @Test
-  public void shouldNotInvokeReadyHandlerWhenAlbumKeyIsNull() {
+  public void shouldNotInvokeReadyHandlerWhenAlbumKeyIsNull()
+      throws CopyExceptionWithFailureReason {
     SynologyMediaAlbumBinder<String> binder = new SynologyMediaAlbumBinder<>(mockConsumer, monitor);
     binder.put(null, newPhotoId, jobId);
     verify(mockConsumer, never()).accept(any(), any(), any());
   }
 
   @Test
-  public void shouldNotInvokeReadyHandlerWhenNewItemKeyIsNull() {
+  public void shouldNotInvokeReadyHandlerWhenNewItemKeyIsNull()
+      throws CopyExceptionWithFailureReason {
     SynologyMediaAlbumBinder<String> binder = new SynologyMediaAlbumBinder<>(mockConsumer, monitor);
     binder.put(photo.getAlbumId(), null, jobId);
     verify(mockConsumer, never()).accept(any(), any(), any());
   }
 
   @Test
-  public void shouldNotInvokeReadyHandlerWhenNewAlbumKeyIsNull() {
+  public void shouldNotInvokeReadyHandlerWhenNewAlbumKeyIsNull()
+      throws CopyExceptionWithFailureReason {
     SynologyMediaAlbumBinder<String> binder = new SynologyMediaAlbumBinder<>(mockConsumer, monitor);
     binder.whenAlbumReady(album.getId(), null, jobId);
     verify(mockConsumer, never()).accept(any(), any(), any());

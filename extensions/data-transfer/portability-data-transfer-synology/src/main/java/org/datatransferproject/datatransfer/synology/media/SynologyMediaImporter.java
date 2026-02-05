@@ -41,7 +41,7 @@ public class SynologyMediaImporter
       synologyUploader.importVideos(data.getVideos(), jobId);
     } catch (Exception e) {
       monitor.severe(() -> "[SynologyImporter] SynologyMediaImporter failed to import data:" + e);
-      return new ImportResult(e);
+      throw e;
     }
 
     return ImportResult.OK;
